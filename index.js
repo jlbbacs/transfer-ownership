@@ -1,73 +1,63 @@
-const express = require("express");
-const { google } = require("googleapis");
-const session = require("cookie-session");
-require("dotenv").config();
+import fs from 'fs';
+import readline from 'readline';
+import { google } from 'googleapis';
+import open from 'open';
 
-const app = express();
-const PORT = 3000;
 
-app.use(session({
-  name: 'session',
-  keys: ['secret-key'],
-}));
-
-const oauth2Client = new google.auth.OAuth2(
-  process.env.CLIENT_ID,
-  process.env.CLIENT_SECRET,
-  "http://localhost:3000/auth/callback"
-);
-
-// Scopes for listing and transferring files
+// SET YOUR CLIENT INFO
+const CLIENT_ID = '297488501161-rbgmgct0ipnpmiv4fdetqgt11dtig4l6.apps.googleusercontent.com';
+const CLIENT_SECRET = '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';
+const REDIRECT_URI = 'http://localhost'; // or urn:ietf:wg:oauth:2.0:oob for CLI
 const SCOPES = ['https://www.googleapis.com/auth/drive'];
 
-app.get("/auth", (req, res) => {
-  const url = oauth2Client.generateAuthUrl({
-    access_type: "offline",
+const oAuth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+
+function getAccessToken() {
+  const authUrl = oAuth2Client.generateAuthUrl({
+    access_type: 'offline',
     scope: SCOPES,
   });
-  res.redirect(url);
-});
 
-app.get("/auth/callback", async (req, res) => {
-  const { code } = req.query;
-  const { tokens } = await oauth2Client.getToken(code);
-  req.session.tokens = tokens;
-  res.redirect("/files");
-});
+  console.log('Authorize this app by visiting this URL:', authUrl);
+  open(authUrl);
 
-app.get("/files", async (req, res) => {
-  oauth2Client.setCredentials(req.session.tokens);
-  const drive = google.drive({ version: "v3", auth: oauth2Client });
-
-  const response = await drive.files.list({
-    q: "'me' in owners",
-    fields: "files(id, name, owners)",
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl.question('Enter the code from that page here: ', async (code) => {
+    rl.close();
+    const { tokens } = await oAuth2Client.getToken(code);
+    oAuth2Client.setCredentials(tokens);
+    fs.writeFileSync('token.json', JSON.stringify(tokens));
+    console.log('✅ Token stored to token.json');
+    transferOwnership();
   });
+}
 
-  res.json(response.data.files);
-});
+async function transferOwnership() {
+  const drive = google.drive({ version: 'v3', auth: oAuth2Client });
 
-app.post("/transfer", express.json(), async (req, res) => {
-  const { fileId, newOwnerEmail } = req.body;
-  oauth2Client.setCredentials(req.session.tokens);
-  const drive = google.drive({ version: "v3", auth: oauth2Client });
+  const fileId = '1CPEJAtnNcJ8B-K2N-mOKsgQMNdOtQfGK';
+  const newOwnerEmail = 'josephlesterbacs@gmail.com';
 
   try {
     await drive.permissions.create({
-      fileId,
+      fileId: fileId,
       requestBody: {
-        role: "owner",
-        type: "user",
+        type: 'user',
+        role: 'owner',
         emailAddress: newOwnerEmail,
       },
       transferOwnership: true,
+      fields: 'id',
     });
-
-    res.send({ success: true });
+    console.log('✅ Ownership transferred to ${newOwnerEmail}');
   } catch (err) {
-    console.error(err);
-    res.status(500).send({ success: false, error: err.message });
+    console.error('❌ Error:', err.message);
   }
-});
+}
 
-app.listen(PORT, () => console.log(`🧙 Server running on http://localhost:${PORT}`));
+if (fs.existsSync('token.json')) {
+  oAuth2Client.setCredentials(JSON.parse(fs.readFileSync('token.json')));
+  transferOwnership();
+} else {
+  getAccessToken();
+}
