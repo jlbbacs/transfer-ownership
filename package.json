@@ -2,7 +2,6 @@
   "name": "google-drive-transfer",
   "version": "1.0.0",
   "main": "index.js",
-
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -20,6 +19,9 @@
   "homepage": "https://github.com/jlbbacs/Bacsarsa-Candiate-31#readme",
   "description": "",
   "dependencies": {
+    "cookie-session": "^2.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
     "googleapis": "^148.0.0",
     "open": "^10.1.0"
   }
